@@ -45,4 +45,24 @@ public class Buffer<T> where T : unmanaged
 
         return memory;
     }
+    
+    public unsafe void Print(CLCommandQueue commandQueue, int length, int tSize, int colLength = -1, Func<T, string?>? toString = null)
+    {
+        toString ??= arg => arg.ToString();
+        
+        if (colLength == -1) colLength = length;
+        
+        Console.Write('[');
+        var buf = Map<T>(commandQueue, (nuint)(length * tSize));
+        for (var i = 0; i < length; i++)
+        {
+            if (i % colLength == 0)
+            {
+                Console.Write($"{Environment.NewLine}    ");
+            }
+            
+            Console.Write($"{toString.Invoke(buf[i])}, ");
+        }
+        Console.WriteLine($"{Environment.NewLine}]");
+    }
 }

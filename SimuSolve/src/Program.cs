@@ -24,9 +24,9 @@ public static class Program
         const int totalRowCount = coeffCount * 2;
         
         const int scaleLength = 2 * coeffCount; // 2n
-        const int coeffLength = 2 * coeffCount * coeffCount + 2 * coeffCount; // 2n^2 + 2n
+        const int coeffLength = totalColCount * totalRowCount; // 2n(n + 1) = 2n^2 + 2n
         
-        
+        // TODO: make non-power-of-2 coefficient counts work
         double[] coefficients = [ // length = coeffLength
          // Z  = Aa + Bb + Cc + Dd
             4,   1,   2,   3,   4,
@@ -42,12 +42,11 @@ public static class Program
         ];
         
         
-        
         /*
-         * a =  2.02919708029197
+         * a = +2.02919708029197
          * b = -0.386861313868613
          * c = -1.54744525547445
-         * d =  1.84671532846715
+         * d = +1.84671532846715
          */
         
         // create buffers
@@ -85,6 +84,9 @@ public static class Program
         var rowCount = (uint)coeffCount;
         var colCount = (uint)totalColCount;
 
+        var blockRowCount = coeffCount * 2;
+        // var blockColCount = coeffCount;
+
         for (var i = 0; i < coeffCount - 1; i++)
         {
             // fork on powers of 2
@@ -97,18 +99,19 @@ public static class Program
                 splitterKernel.EnqueueNdRanged(_commandQueue, [blockCount, rowCount, colCount]);
                 
                 blockCount *= 2;
+                blockRowCount /= 2;
+                // blockColCount /= 2;
             }
             
             // calculate scale value for each row
-            scaleCalculatorKernel.SetArg("valueBuffer", coeffSource);
-            scaleCalculatorKernel.SetArg("rowCount", rowCount);
-            scaleCalculatorKernel.SetArg("targetValue", totalColCount-1 - i); // target the last term in each row
+            scaleCalculatorKernel.SetArg("srcBuffer", coeffSource);
+            scaleCalculatorKernel.SetArg("rowCount", blockRowCount);
+            scaleCalculatorKernel.SetArg("targetValue", colCount - 1); // target the last term in each row
             scaleCalculatorKernel.EnqueueNdRanged(_commandQueue, [blockCount, rowCount]);
             
-            
             // apply scale to all actively used coefficients in every row
-            scalerKernel.SetArg("valueBuffer", coeffSource);
-            scalerKernel.SetArg("rowCount", rowCount);
+            scalerKernel.SetArg("srcBuffer", coeffSource);
+            scalerKernel.SetArg("rowCount", blockRowCount);
             scalerKernel.EnqueueNdRanged(_commandQueue, [blockCount, rowCount, colCount]);
             
             // shrink the block size by 1 in both dimensions. this is done here to make the eliminator not do extra work
@@ -118,51 +121,28 @@ public static class Program
             // subtract rows (equations) to eliminate the last term in each row
             eliminatorKernel.SetArg("srcBuffer", coeffSource);
             eliminatorKernel.SetArg("desBuffer", coeffDestination);
-            eliminatorKernel.SetArg("rowCount", rowCount);
+            eliminatorKernel.SetArg("rowCount", blockRowCount);
             eliminatorKernel.EnqueueNdRanged(_commandQueue, [blockCount, rowCount, colCount]);
             
             (coeffSource, coeffDestination) = (coeffDestination, coeffSource);
+            
         }
         
         unknownSolverKernel.SetArg("valueBuffer", coeffSource);
         unknownSolverKernel.EnqueueNdRanged(_commandQueue, [blockCount]);
         
-        Console.WriteLine($"blocks: {blockCount}, rows: {rowCount}, cols: {colCount}");
-        
-        Console.WriteLine("Scale: ");
-        PrintBuffer(scaleBuffer, scaleLength, sizeof(double));
-        
-        Console.WriteLine("Coeffs: ");
-        PrintBuffer(coeffSource, coeffLength, sizeof(double), totalColCount);
-        
+        //TODO: read solutions in correct order
         var buf = coeffSource.Map<double>(_commandQueue, coeffLength * sizeof(double));
-
         for (var i = 0; i < coeffCount; i++)
         {
             var solution = buf[i * 2 * totalColCount];
             var coefficient = (char)('a' + i);
-            Console.WriteLine($"{coefficient} = {solution}");
+            Console.WriteLine($"{coefficient} = {solution:+0.000000000000000;-0.000000000000000}");
         }
 
     }
 
-    private static unsafe void PrintBuffer<T>(Buffer<T> buffer, int length, int tSize, int colCount = -1) where T : unmanaged
-    {
-        if (colCount == -1) colCount = length;
-        
-        Console.Write('[');
-        var buf = buffer.Map<T>(_commandQueue, (nuint)(length * tSize));
-        for (var i = 0; i < length; i++)
-        {
-            if (i % colCount == 0)
-            {
-                Console.Write($"{Environment.NewLine}    ");
-            }
-            
-            Console.Write($"{buf[i]}, ");
-        }
-        Console.WriteLine($"{Environment.NewLine}]");
-    }
+    
     
     private static unsafe void PrintEquations(Buffer<double> coeffBuffer, int coeffCount)
     {
