@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimuSolve", "SimuSolve\SimuSolve.csproj", "{723F34D7-E4CB-4D29-9574-1FC8C254850E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mandelbrot", "Mandelbrot\Mandelbrot.csproj", "{267DB052-A604-4968-B78B-F34C227B9825}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CLObjects", "CLObjects\CLObjects.csproj", "{AECC7984-8AF8-452A-BD6A-253F10A74FDE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{723F34D7-E4CB-4D29-9574-1FC8C254850E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{723F34D7-E4CB-4D29-9574-1FC8C254850E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{723F34D7-E4CB-4D29-9574-1FC8C254850E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{723F34D7-E4CB-4D29-9574-1FC8C254850E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{267DB052-A604-4968-B78B-F34C227B9825}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{267DB052-A604-4968-B78B-F34C227B9825}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{267DB052-A604-4968-B78B-F34C227B9825}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{267DB052-A604-4968-B78B-F34C227B9825}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AECC7984-8AF8-452A-BD6A-253F10A74FDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AECC7984-8AF8-452A-BD6A-253F10A74FDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AECC7984-8AF8-452A-BD6A-253F10A74FDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AECC7984-8AF8-452A-BD6A-253F10A74FDE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

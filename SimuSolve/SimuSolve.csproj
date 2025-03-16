@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="OpenTK" Version="4.9.3" />
+    </ItemGroup>
+    
+    <ItemGroup>
+      <ProjectReference Include="..\CLObjects\CLObjects.csproj" />
+    </ItemGroup>
+    
+    
+    <ItemGroup>
+        <EmbeddedResource Include="kernels\*" />
+    </ItemGroup>
+
+</Project>
