@@ -83,9 +83,8 @@ public static class Program
         var blockCount = (uint)1;
         var rowCount = (uint)coeffCount;
         var colCount = (uint)totalColCount;
-
+        
         var blockRowCount = coeffCount * 2;
-        // var blockColCount = coeffCount;
 
         for (var i = 0; i < coeffCount - 1; i++)
         {
@@ -94,13 +93,11 @@ public static class Program
             {
                 splitterKernel.SetArg("buffer", coeffSource);
                 splitterKernel.SetArg("rowCount", rowCount);
-                splitterKernel.SetArg("colCount", colCount);
                 
                 splitterKernel.EnqueueNdRanged(_commandQueue, [blockCount, rowCount, colCount]);
                 
                 blockCount *= 2;
                 blockRowCount /= 2;
-                // blockColCount /= 2;
             }
             
             // calculate scale value for each row
@@ -128,10 +125,12 @@ public static class Program
             
         }
         
+        coeffSource.Print(_commandQueue, coeffLength, sizeof(double), totalColCount, d => d.ToString("+0.000000000000000;-0.000000000000000"));
+        coeffDestination.Print(_commandQueue, coeffLength, sizeof(double), totalColCount, d => d.ToString("+0.000000000000000;-0.000000000000000"));
+        
         unknownSolverKernel.SetArg("valueBuffer", coeffSource);
         unknownSolverKernel.EnqueueNdRanged(_commandQueue, [blockCount]);
         
-        //TODO: read solutions in correct order
         var buf = coeffSource.Map<double>(_commandQueue, coeffLength * sizeof(double));
         for (var i = 0; i < coeffCount; i++)
         {
@@ -156,7 +155,7 @@ public static class Program
             var equation = new StringBuilder();
             for (var col = 0; col < coeffCount; col++)
             {
-                var coeff = coeffs[((row * colCount) + col + 1)]; // +1 since const terms are at index 0
+                var coeff = coeffs[row * colCount + col + 1]; // +1 since const terms are at index 0
                 
                 var signCoeff = coeff < 0 ? '-' : '+';
                 var absCoeff = Math.Abs(coeff);
@@ -171,6 +170,5 @@ public static class Program
             
             Console.WriteLine(equation);
         }
-        
     }
 }
