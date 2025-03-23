@@ -28,10 +28,9 @@ public class Buffer<T> where T : unmanaged
         ClException.ThrowIfNotSuccess(bufferCode, $"Failed to create CL Buffer: {bufferCode}");
     }
     
-    public unsafe TMapped* Map<TMapped>(CLCommandQueue commandQueue, nuint size, nuint offset = 0, MapFlags flags = MapFlags.Read)
-        where TMapped : unmanaged
+    public unsafe T* Map(CLCommandQueue commandQueue, nuint size, nuint offset = 0, MapFlags flags = MapFlags.Read)
     {
-        var memory = (TMapped*)CL.EnqueueMapBuffer(commandQueue,
+        var memory = (T*)CL.EnqueueMapBuffer(commandQueue,
             _buffer,
             true,
             flags,
@@ -45,6 +44,17 @@ public class Buffer<T> where T : unmanaged
 
         return memory;
     }
+
+    public unsafe T[] ToArray(CLCommandQueue commandQueue, int length, nuint tSize)
+    {
+        var mapped = Map(commandQueue, (nuint)length * tSize);
+        var array = new T[length];
+        for (var i = 0; i < length; i++)
+        {
+            array[i] = mapped[i];
+        }
+        return array;
+    }
     
     public unsafe void Print(CLCommandQueue commandQueue, int length, int tSize, int colLength = -1, Func<T, string?>? toString = null)
     {
@@ -53,7 +63,7 @@ public class Buffer<T> where T : unmanaged
         if (colLength == -1) colLength = length;
         
         Console.Write('[');
-        var buf = Map<T>(commandQueue, (nuint)(length * tSize));
+        var buf = Map(commandQueue, (nuint)(length * tSize));
         for (var i = 0; i < length; i++)
         {
             if (i % colLength == 0)

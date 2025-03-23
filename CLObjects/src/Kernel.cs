@@ -17,7 +17,7 @@ public class Kernel
     public CLProgram ClProgram => _program;
     
     public CLKernel ClKernel => _kernel;
-    public IntPtr Handle => _kernel.Handle;
+    public nint Handle => _kernel.Handle;
     
     
     
@@ -70,7 +70,7 @@ public class Kernel
     public void SetArg<T>(string name, Buffer<T> value) where T : unmanaged => SetArg(_argNames[name], value);
 
     public void EnqueueNdRanged(CLCommandQueue commandQueue,
-        UIntPtr[] globalSize, UIntPtr[]? globalOffset = null, UIntPtr[]? localSize = null)
+        nuint[] globalSize, nuint[]? globalOffset = null, nuint[]? localSize = null)
     {
         var dimensions = (uint)globalSize.Length;
         
@@ -78,9 +78,9 @@ public class Kernel
             commandQueue, 
             _kernel,
             dimensions,
-            globalOffset ?? new UIntPtr[dimensions],
+            globalOffset ?? new nuint[dimensions],
             globalSize,
-            localSize ?? new UIntPtr[dimensions].Select(_ => (UIntPtr)1).ToArray(),
+            localSize ?? new nuint[dimensions].Select(_ => (nuint)1).ToArray(),
             0,
             null,
             out _);
