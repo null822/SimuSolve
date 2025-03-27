@@ -6,6 +6,8 @@ using OpenTK.Compute.OpenCL;
 
 namespace SimuSolve;
 
+// TODO: non-power-of-2 coeff count optimisations
+
 public static class Program
 {
     private static CLDevice _device;
@@ -21,42 +23,59 @@ public static class Program
         CL.GetDeviceInfo(_device, DeviceInfo.Name, out var deviceNameBytes);
         Console.WriteLine($"Running on Device: {Encoding.UTF8.GetString(deviceNameBytes)}");
         
-        const uint coeffCount = 8192;
-
+        const uint coeffCount = 50;
         var (inputCoefficients, inputConstTerms) = GetCoefficients(coeffCount, true);
+        
+        var inputString = new StringBuilder();
+        for (var equationIndex = 0; equationIndex < coeffCount; equationIndex++)
+        {
+            var equationCoefficients = inputCoefficients[equationIndex];
+            
+            for (var coeffIndex = 0; coeffIndex < coeffCount; coeffIndex++)
+            {
+                inputString.Append($"{equationCoefficients[coeffIndex]:R}a_{{{coeffIndex}}} + ");
+            }
+
+            inputString.Remove(inputString.Length - 3, 3);
+
+            inputString.Append($" = {inputConstTerms[equationIndex]:R} \\\\\n");
+        }
+        
+        File.WriteAllText("input.tex", inputString.ToString());
+        inputString.Clear();
+        
+        Console.WriteLine(inputString);
+
         
         var solutions = Solve(coeffCount, inputCoefficients, inputConstTerms);
         
+        var outputString = new StringBuilder();
         for (var i = 0; i < coeffCount; i++)
         {
             var solution = solutions[i];
-            var coefficient = (char)('a' + i);
-            Console.WriteLine($"{coefficient} = {solution:+0.000000000000;-0.000000000000}");
+            outputString.Append($"a_{{{i}}} = {solution:N4} \\\\\n");
         }
+        
+        File.WriteAllText("output.tex", outputString.ToString());
+        outputString.Clear();
     }
     
-    private static double[] Solve(uint inputCoeffCount, double[][] inputCoefficients, double[] inputConstTerms)
+    private static double[] Solve(uint coeffCount, double[][] inputCoefficients, double[] inputConstTerms)
     {
+        var maxCoeffCount = BitOperations.RoundUpToPowerOf2(coeffCount);
         
-        var coeffCount = BitOperations.RoundUpToPowerOf2(inputCoeffCount);
-        var totalRowCount = coeffCount * 2;
+        var totalRowCount = maxCoeffCount * 2;
         var totalColCount = coeffCount + 1;
         
-        var minCoeffCount = inputCoeffCount;
-        var minTotalRowCount = minCoeffCount * 2;
-        var minTotalColCount = minCoeffCount + 1;
-        
-        var scaleLength = 2 * coeffCount; // 2n
-        var coeffLength = totalColCount * totalRowCount; // 2n(n + 1) = 2n^2 + 2n
-        
+        var coeffLength = totalColCount * totalRowCount;
         
         
         // pack data into coefficient buffer
         var coefficients = new double[coeffLength];
-        for (var row = 0; row < minTotalRowCount / 2; row++)
+        for (var row = 0; row < coeffCount; row++)
         {
             coefficients[row * totalColCount] = inputConstTerms[row];
-            for (var col = 0; col < minTotalColCount - 1; col++)
+            for (var col = 0; col < coeffCount; col++)
             {
                 coefficients[row * totalColCount + col + 1] = inputCoefficients[row][col];
             }
@@ -67,9 +86,9 @@ public static class Program
         s.Start();
         
         // create buffers
-        var scaleBuffer = new Buffer<double>(_context, MemoryFlags.HostReadOnly, scaleLength * sizeof(double)); // 2n
-        var coeffBuffer1 = new Buffer<double>(_context, MemoryFlags.CopyHostPtr, coefficients); // 2n^2 + 2n
-        var coeffBuffer2 = new Buffer<double>(_context, MemoryFlags.HostReadOnly, coeffLength * sizeof(double)); // 2n^2 + 2n
+        var scaleBuffer = new Buffer<double>(_context, MemoryFlags.HostReadOnly, totalRowCount * sizeof(double));
+        var coeffBuffer1 = new Buffer<double>(_context, MemoryFlags.CopyHostPtr, coefficients);
+        var coeffBuffer2 = new Buffer<double>(_context, MemoryFlags.HostReadOnly, coeffLength * sizeof(double));
         
         // set constant kernel arguments
         Kernels.Splitter.SetArg("totalColCount", totalColCount);
@@ -81,35 +100,35 @@ public static class Program
         Kernels.UnknownSolver.SetArg("totalColCount", totalColCount);
         Kernels.ResultCopier.SetArg("outputBuffer", scaleBuffer);
         Kernels.ResultCopier.SetArg("totalColCount", totalColCount);
+        Kernels.ResultCopier.SetArg("center", maxCoeffCount / 2);
+        Kernels.ResultCopier.SetArg("coeffCountDiff", maxCoeffCount - coeffCount);
         
         
         var coeffSource = coeffBuffer1; // the source buffer
         var coeffDestination = coeffBuffer2; // the destination buffer
 
-        var boundaryRowCount = coeffCount * 2; // amount of rows between adjacent blocks
-        
+        var boundaryRowCount = maxCoeffCount * 2; // amount of rows between adjacent blocks
         var blockCount = 1u; // amount of blocks
-        var rowCount = minCoeffCount; // amount of rows in a block
-        var colCount = minTotalColCount; // amount of cols in a block
-        
+        var rowCount = coeffCount; // amount of rows in a block
+        var colCount = totalColCount; // amount of cols in a block
         
         // force a premature split if the coeff count is not a power of 2
-        if (!BitOperations.IsPow2(minCoeffCount))
+        if (!BitOperations.IsPow2(coeffCount))
         {
             Kernels.Splitter.SetArg("buffer", coeffSource);
-            Kernels.Splitter.SetArg("rowCount", coeffCount);
-            Kernels.Splitter.SetArg("colCount", minCoeffCount + 1);
-            Kernels.Splitter.EnqueueNdRanged(_commandQueue, [1, minCoeffCount, minCoeffCount + 1]);
+            Kernels.Splitter.SetArg("rowCount", maxCoeffCount);
+            Kernels.Splitter.SetArg("colCount", totalColCount);
+            Kernels.Splitter.EnqueueNdRanged(_commandQueue, [1, coeffCount, totalColCount]);
             
             blockCount *= 2;
             boundaryRowCount /= 2;
         }
         
-        for (var i = 0; i < minCoeffCount - 1; i++)
+        for (var i = 0; i < coeffCount - 1; i++)
         {
             // debugging
             // coeffDestination.Clear(_commandQueue, coeffLength * sizeof(double));
-            Console.WriteLine($"{i} / {minCoeffCount}");
+            // Console.WriteLine($"{i} / {coeffCount}");
             
             // fork on powers of 2
             if (BitOperations.IsPow2(rowCount))
@@ -152,7 +171,7 @@ public static class Program
         // scaleBuffer.Print(_commandQueue, (int)scaleLength, sizeof(double), 1, d => d.ToString("+0.000000000000;-0.000000000000"));
         
         Kernels.UnknownSolver.SetArg("valueBuffer", coeffSource);
-        Kernels.UnknownSolver.EnqueueNdRanged(_commandQueue, [blockCount]);
+        Kernels.UnknownSolver.EnqueueNdRanged(_commandQueue, [coeffCount]); // maxCoeffCount = blockCount here
         
         Kernels.ResultCopier.SetArg("coeffBuffer", coeffSource);
         Kernels.ResultCopier.EnqueueNdRanged(_commandQueue, [coeffCount]);
@@ -191,6 +210,15 @@ public static class Program
         }
         else switch (coeffCount)
         {
+            case 1:
+                inputCoefficients = [[4]];
+                inputConstTerms = [2];
+                /*
+                 * Solution:
+                 *
+                 * a = 0.5
+                 */
+                break;
             case 3:
                 inputCoefficients = [
                     [1, 2, 3],
@@ -234,6 +262,95 @@ public static class Program
                  * d = +1.84671532846715
                  */
                 break;
+            case 5:
+                inputCoefficients = [
+                    [1, 2, 3, 4, 7],
+                    [7, 7, 4, 2, 5],
+                    [5, 3, 7, 1, 6],
+                    [3, 5, 9, 8, 2],
+                    [7, 6, 8, 4, 3],
+                ];
+                inputConstTerms = [
+                    4,
+                    9,
+                    0,
+                    5,
+                    5,
+                ];
+                
+                /*
+                 * Solutions:
+                 *
+                 * a = -0.00122324159021403
+                 * b = +1.48746177370031
+                 * c = -0.86177370030581
+                 * d = +0.625688073394495
+                 * e = +0.158409785932722
+                 */
+                break;
+            case 6:
+                inputCoefficients =
+                [
+                    [7, 4, 6, 3, 2, 9],
+                    [4, 4, 5, 3, 4, 8],
+                    [6, 5, 5, 5, 4, 7],
+                    [3, 6, 3, 1, 7, 3],
+                    [2, 5, 2, 2, 3, 9],
+                    [3, 5, 4, 5, 7, 4],
+                ];
+                inputConstTerms =
+                [
+                    2,
+                    8,
+                    5,
+                    3,
+                    2,
+                    7,
+                ];
+                /*
+                 * Solutions:
+                 *
+                 * a = -33.375
+                 * b = +40.8916666666667
+                 * c = +42.65
+                 * d = +4.18333333333333
+                 * e = -32.9833333333333
+                 * f = -14.4916666666667
+                 */
+                break;
+            case 7:
+                inputCoefficients =
+                [
+                    [7, 4, 6, 3, 2, 9, 1],
+                    [4, 4, 5, 3, 4, 8, 4],
+                    [6, 5, 5, 5, 4, 7, 5],
+                    [3, 6, 3, 1, 7, 3, 1],
+                    [2, 5, 2, 2, 3, 9, 5],
+                    [3, 5, 4, 5, 7, 4, 4],
+                    [2, 7, 5, 6, 5, 1, 2],
+                ];
+                inputConstTerms =
+                [
+                    2,
+                    8,
+                    5,
+                    3,
+                    2,
+                    7,
+                    3,
+                ];
+                /*
+                 * Solutions:
+                 *
+                 * a = -0.768620519565932
+                 * b = -1.31548010522854
+                 * c = +2.43546530746465
+                 * d = -0.888770141400855
+                 * e = +0.891072015784282
+                 * f = -0.271662282144031
+                 * g = +1.35859914501809
+                 */
+                break;
             case 8:
                 inputCoefficients = [
                     [1, 2, 3, 4, 5, 6, 7, 8],
@@ -268,10 +385,7 @@ public static class Program
                  * h = -13.0537445422926
                  */
                 break;
-            default:
-                inputCoefficients = null!;
-                inputConstTerms = null!;
-                break;
+            default: throw new Exception($"Coefficient count {coeffCount} does not have a predefined set of inputs");
         }
 
         return (inputCoefficients, inputConstTerms);

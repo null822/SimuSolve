@@ -1,6 +1,4 @@
-﻿#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-
-kernel void Main(
+﻿kernel void Main(
     global double* valueBuffer,
     uint totalColCount) // total amount of cols in buffer
 {

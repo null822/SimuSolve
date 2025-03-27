@@ -1,6 +1,4 @@
-﻿#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-
-kernel void Main(
+﻿kernel void Main(
     global double* scaleBuffer,
     global double* srcBuffer,
     uint boundaryRowCount, // amount of rows between adjacent blocks

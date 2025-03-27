@@ -1,5 +1,3 @@
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-
 kernel void Main(
     global double* buffer,
     uint rowCount, // ammount of rows in a block
