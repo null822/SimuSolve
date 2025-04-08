@@ -15,7 +15,7 @@ public static class Program
     private static CLContext _context;
     private static CLCommandQueue _commandQueue;
     
-    public static void Main()
+    public static void Main(string[] args)
     {
         (_device, _context, _commandQueue) = ClUtil.InitializeOpenCl(Constants.PlatformIndex, Constants.DeviceIndex);
         Kernels.CreateKernels(_context, _device);
@@ -23,41 +23,60 @@ public static class Program
         CL.GetDeviceInfo(_device, DeviceInfo.Name, out var deviceNameBytes);
         Console.WriteLine($"Running on Device: {Encoding.UTF8.GetString(deviceNameBytes)}");
         
-        const uint coeffCount = 50;
-        var (inputCoefficients, inputConstTerms) = GetCoefficients(coeffCount, true);
+        var inputPath =  args.Length >= 1 ? args[0] : "data/input.csv";
+        var outputPath = args.Length >= 2 ? args[1] : "data/output.csv";
         
-        var inputString = new StringBuilder();
-        for (var equationIndex = 0; equationIndex < coeffCount; equationIndex++)
+        // load input file
+        var inputString = File.ReadAllText(inputPath).Replace(" ", "");
+        var inputRows = inputString.Split('\n');
+        var coeffCount = (uint)inputRows.Length;
+        
+        var coefficients = new double[coeffCount][];
+        var constTerms = new double[coeffCount];
+        for (var row = 0; row < coeffCount; row++)
         {
-            var equationCoefficients = inputCoefficients[equationIndex];
+            var inputRow = inputRows[row].Split(',');
             
-            for (var coeffIndex = 0; coeffIndex < coeffCount; coeffIndex++)
+            // const terms stored in the first column
+            if (!double.TryParse(inputRow[0], out constTerms[row]))
+                constTerms[row] = double.NaN;
+            
+            // all other coefficients are stored in the next columns
+            var coefficientsRow = new double[coeffCount];
+            for (var col = 0; col < coeffCount; col++)
             {
-                inputString.Append($"{equationCoefficients[coeffIndex]:R}a_{{{coeffIndex}}} + ");
+                if (!double.TryParse(inputRow[col + 1], out coefficientsRow[col]))
+                    coefficientsRow[col] = double.NaN;
             }
-
-            inputString.Remove(inputString.Length - 3, 3);
-
-            inputString.Append($" = {inputConstTerms[equationIndex]:R} \\\\\n");
+            
+            coefficients[row] = coefficientsRow;
         }
         
-        File.WriteAllText("input.tex", inputString.ToString());
-        inputString.Clear();
+        // solve the simultaneous equations
+        var solutions = Solve(coeffCount, coefficients, constTerms);
         
-        Console.WriteLine(inputString);
-
         
-        var solutions = Solve(coeffCount, inputCoefficients, inputConstTerms);
+        if (solutions.Length <= 64)
+        {
+            Console.WriteLine("Solutions: ");
+            for (var i = 0; i < solutions.Length; i++)
+            {
+                Console.WriteLine($"a_{i} = {solutions[i]:g4}");
+            }
+        }
         
+        // write solutions to output file
         var outputString = new StringBuilder();
         for (var i = 0; i < coeffCount; i++)
         {
             var solution = solutions[i];
-            outputString.Append($"a_{{{i}}} = {solution:N4} \\\\\n");
+            outputString.Append($"{solution:R}\n");
         }
-        
-        File.WriteAllText("output.tex", outputString.ToString());
+        outputString.Remove(outputString.Length - 1, 1); // remove trailing newline
+        File.WriteAllText(outputPath, outputString.ToString());
         outputString.Clear();
+        
+        Console.WriteLine($"Solutions Saved to \"{outputPath}\"");
     }
     
     private static double[] Solve(uint coeffCount, double[][] inputCoefficients, double[] inputConstTerms)
@@ -126,10 +145,6 @@ public static class Program
         
         for (var i = 0; i < coeffCount - 1; i++)
         {
-            // debugging
-            // coeffDestination.Clear(_commandQueue, coeffLength * sizeof(double));
-            // Console.WriteLine($"{i} / {coeffCount}");
-            
             // fork on powers of 2
             if (BitOperations.IsPow2(rowCount))
             {
@@ -167,9 +182,6 @@ public static class Program
             (coeffSource, coeffDestination) = (coeffDestination, coeffSource);
         }
         
-        // coeffSource.Print(_commandQueue, (int)coeffLength, sizeof(double), (int)totalColCount, d => d.ToString("+0.000000000000;-0.000000000000"));
-        // scaleBuffer.Print(_commandQueue, (int)scaleLength, sizeof(double), 1, d => d.ToString("+0.000000000000;-0.000000000000"));
-        
         Kernels.UnknownSolver.SetArg("valueBuffer", coeffSource);
         Kernels.UnknownSolver.EnqueueNdRanged(_commandQueue, [coeffCount]); // maxCoeffCount = blockCount here
         
@@ -182,212 +194,5 @@ public static class Program
         var results = scaleBuffer.ToArray(_commandQueue, (int)coeffCount, sizeof(double));
         
         return results;
-    }
-
-    private static (double[][] inputCoefficients, double[] inputConstTerms) GetCoefficients(uint coeffCount, bool randomCoefficients)
-    {
-        
-        double[][] inputCoefficients; // length = coeffCount, coeffCount
-        double[] inputConstTerms; // length = coeffCount
-
-        if (randomCoefficients)
-        {
-            var random = new Random();
-            
-            inputCoefficients = new double[coeffCount][];
-            inputConstTerms = new double[coeffCount];
-
-            for (var row = 0; row < coeffCount; row++)
-            {
-                inputConstTerms[row] = random.NextDouble() * 1/random.NextDouble();
-                inputCoefficients[row] = new double[coeffCount];
-                for (var col = 0; col < coeffCount; col++)
-                {
-                    inputCoefficients[row][col] = random.NextDouble() * 1/random.NextDouble();
-                }
-            }
-            
-        }
-        else switch (coeffCount)
-        {
-            case 1:
-                inputCoefficients = [[4]];
-                inputConstTerms = [2];
-                /*
-                 * Solution:
-                 *
-                 * a = 0.5
-                 */
-                break;
-            case 3:
-                inputCoefficients = [
-                    [1, 2, 3],
-                    [7, 7, 4],
-                    [5, 3, 7],
-                ];
-                inputConstTerms = [
-                    4,
-                    9,
-                    0
-                ];
-                
-                /*
-                 * Solutions:
-                 * 
-                 * a = -1.63492063492064
-                 * b = +2.98412698412698
-                 * c = -0.111111111111111
-                 */
-                break;
-            case 4:
-                inputCoefficients = [
-                    [1, 2, 3, 4],
-                    [7, 7, 4, 2],
-                    [5, 3, 7, 1],
-                    [3, 5, 9, 8],
-                ];
-                inputConstTerms = [
-                    4,
-                    9,
-                    0,
-                    5,
-                ];
-                
-                /*
-                 * Solutions:
-                 * 
-                 * a = +2.02919708029197
-                 * b = -0.386861313868613
-                 * c = -1.54744525547445
-                 * d = +1.84671532846715
-                 */
-                break;
-            case 5:
-                inputCoefficients = [
-                    [1, 2, 3, 4, 7],
-                    [7, 7, 4, 2, 5],
-                    [5, 3, 7, 1, 6],
-                    [3, 5, 9, 8, 2],
-                    [7, 6, 8, 4, 3],
-                ];
-                inputConstTerms = [
-                    4,
-                    9,
-                    0,
-                    5,
-                    5,
-                ];
-                
-                /*
-                 * Solutions:
-                 *
-                 * a = -0.00122324159021403
-                 * b = +1.48746177370031
-                 * c = -0.86177370030581
-                 * d = +0.625688073394495
-                 * e = +0.158409785932722
-                 */
-                break;
-            case 6:
-                inputCoefficients =
-                [
-                    [7, 4, 6, 3, 2, 9],
-                    [4, 4, 5, 3, 4, 8],
-                    [6, 5, 5, 5, 4, 7],
-                    [3, 6, 3, 1, 7, 3],
-                    [2, 5, 2, 2, 3, 9],
-                    [3, 5, 4, 5, 7, 4],
-                ];
-                inputConstTerms =
-                [
-                    2,
-                    8,
-                    5,
-                    3,
-                    2,
-                    7,
-                ];
-                /*
-                 * Solutions:
-                 *
-                 * a = -33.375
-                 * b = +40.8916666666667
-                 * c = +42.65
-                 * d = +4.18333333333333
-                 * e = -32.9833333333333
-                 * f = -14.4916666666667
-                 */
-                break;
-            case 7:
-                inputCoefficients =
-                [
-                    [7, 4, 6, 3, 2, 9, 1],
-                    [4, 4, 5, 3, 4, 8, 4],
-                    [6, 5, 5, 5, 4, 7, 5],
-                    [3, 6, 3, 1, 7, 3, 1],
-                    [2, 5, 2, 2, 3, 9, 5],
-                    [3, 5, 4, 5, 7, 4, 4],
-                    [2, 7, 5, 6, 5, 1, 2],
-                ];
-                inputConstTerms =
-                [
-                    2,
-                    8,
-                    5,
-                    3,
-                    2,
-                    7,
-                    3,
-                ];
-                /*
-                 * Solutions:
-                 *
-                 * a = -0.768620519565932
-                 * b = -1.31548010522854
-                 * c = +2.43546530746465
-                 * d = -0.888770141400855
-                 * e = +0.891072015784282
-                 * f = -0.271662282144031
-                 * g = +1.35859914501809
-                 */
-                break;
-            case 8:
-                inputCoefficients = [
-                    [1, 2, 3, 4, 5, 6, 7, 8],
-                    [1, 3, 9, 6, 8, 5, 7, 5],
-                    [9, 5, 1, 7, 8, 1, 5, 3],
-                    [3, 2, 5, 4, 0, 8, 2, 8],
-                    [8, 5, 3, 7, 7, 6, 3, 2],
-                    [4, 1, 2, 3, 5, 4, 4, 1],
-                    [6, 3, 2, 1, 0, 0, 1, 5],
-                    [5, 7, 1, 6, 6, 5, 2, 3],
-                ];
-                inputConstTerms = [
-                    1,
-                    6,
-                    7,
-                    9,
-                    2,
-                    2,
-                    9,
-                    2,
-                ];
-                /*
-                 * Solutions:
-                 *
-                 * a = +0.467568267594169
-                 * b = +12.4901391252868
-                 * c = +1.70086213276104
-                 * d = +7.41027159032043
-                 * e = -23.7865388884778
-                 * f = +0.31747206393843
-                 * g = +23.1808998741952
-                 * h = -13.0537445422926
-                 */
-                break;
-            default: throw new Exception($"Coefficient count {coeffCount} does not have a predefined set of inputs");
-        }
-
-        return (inputCoefficients, inputConstTerms);
     }
 }

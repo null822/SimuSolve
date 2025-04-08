@@ -1,7 +1,7 @@
 ﻿kernel void Main(
     global double* scaleBuffer,
     global double* srcBuffer,
-    uint boundaryRowCount, // amount of rows between adjacent blocks
+    uint boundaryRowCount, // amount of rows between the start of adjacent blocks
     uint totalColCount, // total amount of cols in buffer
     uint targetValue) // index of the target coefficient to calculate scales for
 {

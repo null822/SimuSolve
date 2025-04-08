@@ -14,5 +14,4 @@
     size_t scaleIndex = (blockIndex * boundaryRowCount) + rowIndex; // a block in the scale buffer is 1 wide
     
     srcBuffer[valueIndex] *= scaleBuffer[scaleIndex];
-    // srcBuffer[valueIndex] = rowCount;
 }
