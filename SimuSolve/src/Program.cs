@@ -31,7 +31,7 @@ public static class Program
         var inputRows = inputString.Split('\n');
         var coeffCount = (uint)inputRows.Length;
         
-        var coefficients = new double[coeffCount][];
+        var coefficients = new double[coeffCount,coeffCount];
         var constTerms = new double[coeffCount];
         for (var row = 0; row < coeffCount; row++)
         {
@@ -42,14 +42,12 @@ public static class Program
                 constTerms[row] = double.NaN;
             
             // all other coefficients are stored in the next columns
-            var coefficientsRow = new double[coeffCount];
             for (var col = 0; col < coeffCount; col++)
             {
-                if (!double.TryParse(inputRow[col + 1], out coefficientsRow[col]))
-                    coefficientsRow[col] = double.NaN;
+                if (!double.TryParse(inputRow[col + 1], out coefficients[row, col]))
+                    coefficients[row, col] = double.NaN;
             }
             
-            coefficients[row] = coefficientsRow;
         }
         
         // solve the simultaneous equations
@@ -79,7 +77,7 @@ public static class Program
         Console.WriteLine($"Solutions Saved to \"{outputPath}\"");
     }
     
-    private static double[] Solve(uint coeffCount, double[][] inputCoefficients, double[] inputConstTerms)
+    private static double[] Solve(uint coeffCount, double[,] inputCoefficients, double[] inputConstTerms)
     {
         var maxCoeffCount = BitOperations.RoundUpToPowerOf2(coeffCount);
         
@@ -96,7 +94,7 @@ public static class Program
             coefficients[row * totalColCount] = inputConstTerms[row];
             for (var col = 0; col < coeffCount; col++)
             {
-                coefficients[row * totalColCount + col + 1] = inputCoefficients[row][col];
+                coefficients[row * totalColCount + col + 1] = inputCoefficients[row, col];
             }
         }
         
