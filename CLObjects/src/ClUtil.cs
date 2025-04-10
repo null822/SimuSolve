@@ -7,10 +7,10 @@ public static class ClUtil
     public static (CLDevice, CLContext, CLCommandQueue) InitializeOpenCl(int platformIndex, int deviceIndex, IntPtr commandQueueProperties = 0)
     {
         CL.GetPlatformIds(out var platforms);
-        var platform = platforms[platformIndex];
+        var platform = platforms[Math.Min(platformIndex, platforms.Length - 1)];
         
         CL.GetDeviceIds(platform, DeviceType.All, out var devices);
-        var device = devices[deviceIndex];
+        var device = devices[Math.Min(deviceIndex, devices.Length - 1)];
         
         var context = CL.CreateContext([], [device], 0, 0, out var contextCode);
         if (contextCode != CLResultCode.Success) throw new Exception($"Failed to create CL Context: {contextCode}");
